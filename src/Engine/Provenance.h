@@ -9,7 +9,6 @@ class Provenance {
 
 public:
 
-
 }; // Provenance
 
 std::ostream& operator<<(std::ostream& os,const Provenance&);

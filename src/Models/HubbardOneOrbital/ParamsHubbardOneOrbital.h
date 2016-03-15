@@ -16,3 +16,4 @@ struct ParamsHubbardOneOrbital {
 
 }
 #endif // PARAMSHUBBARDONEORBITAL_H
+

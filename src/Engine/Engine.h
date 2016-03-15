@@ -229,8 +229,6 @@ private:
 		}
 	}
 
-
-
 	EngineParamsType params_;
 	mutable RngType rng_;
 	const ModelType& model_;
@@ -244,3 +242,4 @@ private:
 } // namespace Qmc
 
 #endif // ENGINE_H
+

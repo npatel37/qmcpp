@@ -38,3 +38,4 @@ private:
 
 }
 #endif // GEOMETRY_H
+
