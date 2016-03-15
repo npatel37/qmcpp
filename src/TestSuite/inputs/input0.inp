@@ -1,0 +1,21 @@
+Thermalizations=10
+NumberOfTimes=5
+HubbardU=0
+Beta=1
+TotalNumberOfSites=16
+GeometryKind=ladder
+GeometryOptions=ConstantValues
+LadderLeg=4
+IsPeriodicX=1
+IsPeriodicY=1
+Connectors 1 1.0
+Connectors 1 1.0
+
+ChemicalPotential=0.0
+
+Model=HubbardOneOrbital
+potentialV 16 -1 -1 -1 -1
+              -1 -1 -1 -1
+              -1 -1 -1 -1
+              -1 -1 -1 -1 
+
