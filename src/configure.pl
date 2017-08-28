@@ -50,7 +50,9 @@ sub createMakefile
 	my $fh;
 	open($fh,">Makefile") or die "Cannot open Makefile for writing: $!\n";
 
-	Make::newMake($fh,\@drivers,"qpt++"," "," ","");
+	my %additionals;
+	$additionals{"code"} = "QMC++";
+	Make::newMake($fh,\@drivers,\%additionals);
 	print STDERR "File Makefile has been written\n";
 }
 

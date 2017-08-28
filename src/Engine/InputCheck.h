@@ -20,6 +20,16 @@ public:
 		if (optsReadable_!=0) delete optsReadable_;
 	}
 
+	PsimagLite::String import() const
+	{
+		return "";
+	}
+
+	void checkSimpleLabel(PsimagLite::String lastLabel, SizeType line) const
+	{
+
+	}
+
 	bool check(const PsimagLite::String& label,
 	           const PsimagLite::Vector<PsimagLite::String>::Type& vec,
 	           size_t line) const
