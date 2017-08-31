@@ -48,7 +48,7 @@ sub createMakefile
 	}
 
 	my $fh;
-	open($fh,">Makefile") or die "Cannot open Makefile for writing: $!\n";
+	open($fh, ">", "Makefile") or die "Cannot open Makefile for writing: $!\n";
 
 	my %additionals;
 	$additionals{"code"} = "QMC++";
