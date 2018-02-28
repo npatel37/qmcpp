@@ -220,7 +220,7 @@ private:
 			for (SizeType j = 0; j < n; ++j) {
 				RealType sum = 0;
 				for (SizeType k = 0; k < n; ++k) {
-					sum += std::conj(X_[2](i,k)) * X_[2](j,k) / (1.0 + eigs_[0][k]);
+					sum += PsimagLite::conj(X_[2](i,k)) * X_[2](j,k) / (1.0 + eigs_[0][k]);
 				}
 
 				X_[4](i,j) = -sum;
