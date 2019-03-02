@@ -4,6 +4,19 @@
 #include "Matrix.h"
 #include "RandomForTests.h"
 
+/*
+ * X_ = vector matrix of size 5 x nsites x nsites
+ *      X_[0] - O spin up --> B_M B_M-1 .... B_1  with  B_l = e^{-dT K} e^{-dT V(l)}             det{O(snew)}/det{O(sold)}
+ *      X_[1] - O spin down --> same as X_[0]
+ *      X_[2] -
+ *      X_[3] -
+ *      X_[4] - Green's function
+*/
+
+/* need to find a way to store X_[0] and X_[1] for all time steps!
+ * Needed for calculations of the green's function.
+*/
+
 namespace Qmc {
 
 template<typename ModelType>
@@ -25,9 +38,11 @@ public:
 	    : params_(io),
 	      rng_(0),
 	      model_(model),
-	      X_(5),
-	      eigs_(2),
-	      spins_(params_.ntimes,model.geometry().numberOfSites())
+          X_(5),
+          eigs_(2),
+          GreenUp_(params_.ntimes),
+          GreenDn_(params_.ntimes),
+          spins_(params_.ntimes,model.geometry().numberOfSites()) // -- HS field - nsites x #time-slice
 	{
 		spins_.setTo(1);
 
@@ -38,10 +53,10 @@ public:
 		for (SizeType i = 0; i < eigs_.size(); ++i)
 			eigs_[i].resize(nsites);
 
-		expH0_ = model.geometry().matrix();
+        expH0_ = model.geometry().matrix();
 		std::cout<<expH0_;
 		expH0_ *= (params_.beta/params_.ntimes);
-		exp(expH0_);
+        exp(expH0_);                                    // --- non-interacting part of the propogator e^{-dT K}
 		RealType alpha = params_.beta * model_.params().U / params_.ntimes;
 		RealType arctan = atan(sqrt(abs(alpha)/4.0));
 
@@ -56,16 +71,64 @@ public:
 
 	void main()
 	{
+        SizeType nsites = model_.geometry().numberOfSites();
 		for (SizeType i = 0; i < params_.thermalizations; ++i) {
 			evolve(i);
 			printSpins();
 		}
+
+        //RealType density=0.0;
+
+        for (SizeType time = 0; time < params_.ntimes; ++time) {
+
+            RealType densityup=0, densitydn=0;
+            GreenUp_[time].resize(nsites,nsites);
+            GreenDn_[time].resize(nsites,nsites);
+            SizeType tp1 = time+1;
+            calcX(tp1); // -- calculate the Bup Bdown upto current time.
+            diag(X_[0],eigs_[0],'V');
+            diag(X_[1],eigs_[1],'V');
+
+            // -- calculate the Green's Function at time
+            SizeType n = X_[0].n_row();
+            for (SizeType i = 0; i < n; ++i) {
+                for (SizeType j = 0; j < n; ++j) {
+                    RealType sumup=0, sumdn=0;
+                    for (SizeType k = 0; k < n; ++k) {
+                        sumup += PsimagLite::conj(X_[0](i,k)) * X_[0](j,k) / (1.0 + eigs_[0][k]);
+                        sumdn += PsimagLite::conj(X_[1](i,k)) * X_[1](j,k) / (1.0 + eigs_[1][k]);
+                    }
+
+                    GreenUp_[time](i,j) = -sumup;
+                    if (i == j) GreenUp_[time](i,j) += 1.0;
+                    GreenDn_[time](i,j) = -sumdn;
+                    if (i == j) GreenDn_[time](i,j) += 1.0;
+                }
+            }
+
+
+            for (SizeType i = 0; i < n; ++i) {
+                densityup += GreenUp_[time](i,i);
+                densitydn += GreenDn_[time](i,i);
+            }
+            std::cout << time << " " << densityup/nsites << " " << densitydn/nsites << std::endl;
+
+
+        }
+
+
+//        RealType density = trace(GreenUp_[time])/model_.geometry().numberOfSites();
+//        std::cout << density << std::endl;
+//            calcX();
+//            density += densityFunction()*thisSign;
+
 	}
 
 private:
 
 	void evolve(SizeType iter)
 	{
+        diag(X_[3],eigs_[1],'V');
 		PairRealType oldWeight = weightOf();
 		SizeType nsites = model_.geometry().numberOfSites();
 		RealType acceptance = 0;
@@ -75,8 +138,8 @@ private:
 		for (SizeType time = 0; time < params_.ntimes; ++time) {
 			for (SizeType site = 0; site < nsites; ++site) {
 				flipSpin(time,site);
-				calcX();
-				PairRealType newWeight = weightOf();
+                calcX(params_.ntimes);                                        // -- calculate X_[0] and X_[1]
+                PairRealType newWeight = weightOf();            // -- determinant of spin up X[0] and spin dn X[1]
 				RealType ratio1 = newWeight.first/oldWeight.first;
 				RealType ratio2 = newWeight.second/oldWeight.second;
 //				std::cout<<"Old Weight= "<<oldWeight;
@@ -89,11 +152,11 @@ private:
 					X_[2] = X_[3];
 					eigs_[0] = eigs_[1];
 				} else {
-					flipSpin(time,site);
+                    flipSpin(time,site);                        // -- if reject, flip the spin back to original conf.
 				}
 
-				density += densityFunction()*thisSign;
-				sign += thisSign;
+                density += densityFunction()*thisSign;
+                sign += thisSign;
 			}
 		}
 
@@ -115,8 +178,8 @@ private:
 
 	PairRealType weightOf()
 	{
-		RealType ret1 = weightOf(X_[0]);
-		RealType ret2 = weightOf(X_[1]);
+        RealType ret1 = weightOf(X_[0]); // det[1+X0] = det[1 + Bm Bm-1 ... B1] spin up
+        RealType ret2 = weightOf(X_[1]); // det[1+X1] = det[1 + Bm Bm-1 ... B1] spin dn
 //		int b1 = (ret1 > 0) ? 1 : -1;
 //		int b2 = (ret2 > 0) ? 1 : -1;
 //		if (b1 * b2 < 0) {
@@ -126,6 +189,8 @@ private:
 		return PairRealType(ret1,ret2);
 	}
 
+    // -- determinant of matrix 1+X
+    // -- der[diagonal] matrix is product of the diagonal
 	RealType weightOf(const MatrixType& X)
 	{
 		X_[3] = X;
@@ -138,20 +203,22 @@ private:
 		return prod;
 	}
 
-	void calcX()
+    void calcX(SizeType& maxtime)
 	{
-		calcX(X_[0],SPIN_UP);
-		calcX(X_[1],SPIN_DOWN);
+        calcX(X_[0],SPIN_UP,maxtime);
+        calcX(X_[1],SPIN_DOWN,maxtime);
 	}
 
-	void calcX(MatrixType& m,SpinEnum spin)
+    // B_M B_M-1 .... B_1
+    // B_l = e^{-dT K} e^{-dT V(l)}
+    void calcX(MatrixType& m,SpinEnum spin,SizeType& maxtime)
 	{
 		setToIdentity(m);
 		MatrixType Xprev;
 		SizeType nsites = model_.geometry().numberOfSites();
 		VectorType expv(nsites);
 
-		for (SizeType time = 0; time < params_.ntimes; ++time) {
+        for (SizeType time = 0; time < maxtime; ++time) {
 			Xprev = m * expH0_;
 			calcExpV(expv,time,spin);
 			for (SizeType i = 0; i < nsites; ++i)
@@ -234,7 +301,11 @@ private:
 	const ModelType& model_;
 	typename PsimagLite::Vector<MatrixType>::Type X_;
 	typename PsimagLite::Vector<typename PsimagLite::Vector<RealType>::Type>::Type eigs_;
-	PsimagLite::Matrix<int> spins_;
+
+    typename PsimagLite::Vector<MatrixType>::Type GreenUp_;
+    typename PsimagLite::Vector<MatrixType>::Type GreenDn_;
+
+    PsimagLite::Matrix<int> spins_;
 	RealType aUp_,aDown_;
 	MatrixType expH0_;
 }; // class Engine
