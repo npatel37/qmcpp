@@ -53,6 +53,11 @@ public:
 		for (SizeType i = 0; i < eigs_.size(); ++i)
 			eigs_[i].resize(nsites);
 
+        for (SizeType time = 0; time < params_.ntimes; ++time) {
+            GreenUp_[time].resize(nsites,nsites);
+            GreenDn_[time].resize(nsites,nsites);
+        }
+
         expH0_ = model.geometry().matrix();
 		std::cout<<expH0_;
 		expH0_ *= (params_.beta/params_.ntimes);
@@ -71,22 +76,243 @@ public:
 
 	void main()
 	{
+
+
         SizeType nsites = model_.geometry().numberOfSites();
+        SizeType ntimes = params_.ntimes;
 		for (SizeType i = 0; i < params_.thermalizations; ++i) {
 			evolve(i);
+            RealType outmu = chemicalpotential2(params_.mu,params_.filling);
+            params_.mu = outmu;
 			printSpins();
+            //cout.flush();
 		}
 
-        //RealType density=0.0;
 
+
+        std::cout << " === check: density as a function of time === " << std::endl;
+        computeGreenFunctionAll();
+        for (SizeType time=0; time<ntimes; time++) {
+            RealType densityup = 0.0, densitydn = 0.0;
+            for (SizeType i = 0; i < nsites; ++i) {
+                densityup += GreenUp_[time](i,i);
+                densitydn += GreenDn_[time](i,i);
+            }
+            std::cout << time << " " << densityup << " " << densitydn << std::endl;
+        }
+
+        //RealType outmu = chemicalpotential(0.0,1.0);
+        //std::cout << outmu << std::endl;
+
+
+
+        std::cout << " === check band-width: chemical potential sweep === " << std::endl;
+        for(SizeType i=0; i<=100;i++) {
+            params_.mu = -6.0 + i*0.12;
+            computeGreenFunctionAll();
+            for (SizeType time=ntimes-1; time<ntimes; time++) {
+                RealType densityup = 0.0, densitydn = 0.0;
+                for (SizeType i = 0; i < nsites; ++i) {
+                    densityup += GreenUp_[time](i,i);
+                    densitydn += GreenDn_[time](i,i);
+                }
+                std::cout << params_.mu << " " << densityup/nsites << " " << densitydn/nsites << std::endl;
+            }
+
+        }
+
+
+	}
+
+private:
+
+    RealType chemicalpotential2(RealType muin,double filling){
+        //double temp;
+        SizeType nsites = model_.geometry().numberOfSites();
+        //SizeType finaltime = params_.ntimes-1;
+        RealType N=filling;
+        RealType diff, dcen, mucen;
+        RealType muTolerance = 1e-5;
+
+
+        RealType mulow=-model_.params().U-4.0;
+        params_.mu = mulow;
+        computeGreenFunctionAll();
+        RealType dlow = (densityup() + densitydown())/nsites;
+
+        RealType muhigh=model_.params().U+4.0;
+        params_.mu = muhigh;
+        computeGreenFunctionAll();
+        RealType dhigh = (densityup() + densitydown())/nsites;
+
+
+        for(int i=0;i<200;i++){
+
+            mucen = 0.5*(mulow+muhigh);
+            params_.mu = mucen;
+            computeGreenFunctionAll();
+            RealType nup = densityup()/nsites;
+            RealType ndown = densitydown()/nsites;
+            dcen = nup + ndown;
+
+            diff = fabs(N-dcen);
+
+            if(diff<=muTolerance){
+               break;
+            }
+            else if(dcen>N){
+                muhigh=mucen;
+                dhigh = dcen;
+            }
+            else if(dcen<N){
+                mulow = mucen;
+                dlow = dcen;
+            }
+        }
+
+        muin = mucen;
+        params_.mu = muin;
+
+        std::cout << "mu adjusted = " << muin
+                  << " Numb elec (up,down) = (" << densityup() << "," << densitydown() << ")"
+                  << " total density = " << dcen/nsites
+                  << std::endl;
+        assert(diff<=muTolerance);
+        return muin;
+    } // ----------
+
+    RealType chemicalpotential1(RealType muin,double filling){
+        //double temp;
+        SizeType nsites = model_.geometry().numberOfSites();
+        RealType nup, ndown, N1, diff;
+        RealType N=filling*nsites;
+        muin = params_.mu;
+        RealType muTolerance = 1e-5;
+
+        for(int i=0;i<200;i++){             // do not iterate more than 100 times - too expensive!
+            computeGreenFunctionAll();
+            nup = densityup();
+            ndown = densitydown();
+            N1=nup+ndown;
+            diff = fabs(N-N1);
+
+            if(diff<=muTolerance){
+                break;
+            }
+            else if(N1>N){
+                //params_.mu = params_.mu*(1+diff*0.01);
+                params_.mu = params_.mu*(1+diff*0.01);
+                muin = params_.mu;
+            }
+            else if(N1<N){
+                //params_.mu = params_.mu*(1-diff*0.01);
+                params_.mu = params_.mu*(1-diff*0.01);
+                muin = params_.mu;
+            }
+        }
+
+        std::cout << "mu adjusted = " << muin
+                  << " Numb elec (up,down) = (" << nup << "," << ndown << ")"
+                  << " total density = " << N1/nsites
+                  << std::endl;
+        assert(diff<=muTolerance);
+        return muin;
+    } // ----------
+
+
+
+
+    RealType chemicalpotentialOLD(RealType muin,double filling){
+        //double temp;
+        SizeType nsites = model_.geometry().numberOfSites();
+        //SizeType finaltime = params_.ntimes-1;
+        RealType N=filling;
+        RealType nup, ndown, N1, diff;
+        RealType mulow=-model_.params().U-4.0;
+        RealType muhigh=model_.params().U+4.0;
+        RealType muTolerance = 1e-5;
+
+        for(int i=0;i<200;i++){
+
+            computeGreenFunctionAll();
+            nup = densityup()/nsites;
+            ndown = densitydown()/nsites;
+            N1=(nup+ndown);
+            diff = fabs(N-N1);
+
+            if(diff<=muTolerance){
+               break;
+            }
+            else if(N1>N){
+                muhigh=muin;
+                muin=0.5*(mulow+muin);
+                params_.mu = muin;
+            }
+            else if(N1<N){
+                mulow=muin;
+                muin=0.5*(muhigh+muin);
+                params_.mu = muin;
+            }
+        }
+
+        std::cout << "mu adjusted = " << muin
+                  << " Numb elec (up,down) = (" << nup << "," << ndown << ")"
+                  << " total density = " << N1/nsites
+                  << std::endl;
+        assert(diff<=muTolerance);
+        return muin;
+    } // ----------
+
+    RealType densityup(){
+        RealType out=0.0;
+        SizeType nsites = model_.geometry().numberOfSites();
+        SizeType finaltime = params_.ntimes-1;
+
+        for (SizeType i = 0; i < nsites; ++i) {
+            out += GreenUp_[finaltime](i,i);
+        }
+
+        return out;
+    }
+
+    RealType densitydown(){
+        RealType out=0.0;
+        SizeType nsites = model_.geometry().numberOfSites();
+        SizeType finaltime = params_.ntimes-1;
+
+        for (SizeType i = 0; i < nsites; ++i) {
+            out += GreenDn_[finaltime](i,i);
+        }
+
+        return out;
+    }
+
+    void setGreenZero() {
+        SizeType nsites = model_.geometry().numberOfSites();
+        SizeType ntimes = params_.ntimes;
+        for (SizeType time=0; time<ntimes; time++) {
+            for (SizeType i = 0; i < nsites; ++i) {
+                for (SizeType j = 0; j < nsites; ++j) {
+                    GreenUp_[time](i,j) = 0.0;
+                    GreenDn_[time](i,j) = 0.0;
+                }
+            }
+        }
+    }
+
+    void computeGreenFunctionAll() {
+
+        setGreenZero();
         for (SizeType time = 0; time < params_.ntimes; ++time) {
 
-            RealType densityup=0, densitydn=0;
-            GreenUp_[time].resize(nsites,nsites);
-            GreenDn_[time].resize(nsites,nsites);
             SizeType tp1 = time+1;
-            calcX(tp1); // -- calculate the Bup Bdown upto current time.
+
+            // -- spin up
+            calcX(X_[0],SPIN_UP,tp1);
             diag(X_[0],eigs_[0],'V');
+
+            // -- spin down
+            calcX(X_[1],SPIN_DOWN,tp1);
             diag(X_[1],eigs_[1],'V');
 
             // -- calculate the Green's Function at time
@@ -106,25 +332,9 @@ public:
                 }
             }
 
-
-            for (SizeType i = 0; i < n; ++i) {
-                densityup += GreenUp_[time](i,i);
-                densitydn += GreenDn_[time](i,i);
-            }
-            std::cout << time << " " << densityup/nsites << " " << densitydn/nsites << std::endl;
-
-
         }
 
-
-//        RealType density = trace(GreenUp_[time])/model_.geometry().numberOfSites();
-//        std::cout << density << std::endl;
-//            calcX();
-//            density += densityFunction()*thisSign;
-
-	}
-
-private:
+    }
 
 	void evolve(SizeType iter)
 	{
@@ -231,7 +441,7 @@ private:
 	{
 		RealType a = (spin == SPIN_UP) ? aUp_ : aDown_;
 		for (SizeType i = 0; i < v.size(); ++i)
-			v[i] = exp(a*spins_(time,i)-params_.mu*params_.beta/params_.ntimes);
+            v[i] = exp(a*spins_(time,i)+params_.mu*params_.beta/params_.ntimes);
 	}
 
 	bool acceptOrReject(RealType ratio) const
@@ -295,6 +505,7 @@ private:
 			}
 		}
 	}
+
 
 	EngineParamsType params_;
 	mutable RngType rng_;

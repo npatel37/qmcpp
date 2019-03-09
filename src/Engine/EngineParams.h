@@ -12,12 +12,14 @@ struct EngineParams {
 		io.readline(ntimes,"NumberOfTimes=");
 		io.readline(beta,"Beta=");
 		io.readline(mu,"ChemicalPotential=");
+        io.readline(filling,"filling=");
 	}
 
 	SizeType thermalizations;
 	SizeType ntimes;
 	RealType beta;
 	RealType mu;
+    RealType filling;
 };
 
 }
