@@ -64,6 +64,7 @@ public:
         exp(expH0_);                                    // --- non-interacting part of the propogator e^{-dT K}
 		RealType alpha = params_.beta * model_.params().U / params_.ntimes;
 		RealType arctan = atan(sqrt(abs(alpha)/4.0));
+        Lambda = findLambda();
 
 		if (alpha >= 0) {
 			aUp_ = -alpha/2 - 2 * arctan;
@@ -74,6 +75,24 @@ public:
 		}
 	}
 
+    RealType findLambda() {
+        // cosh(lambda) = e^{U/2 * dtau}
+        RealType power = model_.params().U/2.0 * params_.dtau;
+        RealType y = exp(power);
+        RealType diff = 1000;
+        RealType out = 0;
+
+        for(int i=0; i<=2000; i++) {
+            RealType x = i*0.001;
+            RealType ytest = cosh(x);
+            if (fabs(y-ytest)<diff) {
+                diff = fabs(y-ytest);
+                out = x;
+            }
+        }
+        return out;
+    }
+
 	void main()
 	{
 
@@ -82,7 +101,7 @@ public:
         SizeType ntimes = params_.ntimes;
 		for (SizeType i = 0; i < params_.thermalizations; ++i) {
 			evolve(i);
-            RealType outmu = chemicalpotential2(params_.mu,params_.filling);
+            RealType outmu = chemicalpotential1(params_.mu,params_.filling);
             params_.mu = outmu;
 			printSpins();
             //cout.flush();
@@ -175,7 +194,7 @@ private:
 
         std::cout << "mu adjusted = " << muin
                   << " Numb elec (up,down) = (" << densityup() << "," << densitydown() << ")"
-                  << " total density = " << dcen/nsites
+                  << " total density = " << dcen
                   << std::endl;
         assert(diff<=muTolerance);
         return muin;
@@ -215,7 +234,8 @@ private:
                   << " Numb elec (up,down) = (" << nup << "," << ndown << ")"
                   << " total density = " << N1/nsites
                   << std::endl;
-        assert(diff<=muTolerance);
+       assert(diff<=muTolerance);
+       // muin=0.0;
         return muin;
     } // ----------
 
@@ -375,10 +395,10 @@ private:
 		std::cout<<"Acceptance ratio "<<acceptance<<"\n";
 
 		sign *= factor;
-		std::cout<<"Sign= "<<sign<<"\n";
+        std::cout<<"Sign = "<<sign<<"\n";
 
 		density *= factor;
-		std::cout<<"Density= "<<(density/sign)<<"\n";
+        std::cout<<"Density_up = "<<(density/sign)<<"\n";
 	}
 
 	void flipSpin(SizeType time,SizeType site)
@@ -430,7 +450,7 @@ private:
 
         for (SizeType time = 0; time < maxtime; ++time) {
 			Xprev = m * expH0_;
-			calcExpV(expv,time,spin);
+            calcExpV(expv,time,spin);
 			for (SizeType i = 0; i < nsites; ++i)
 				for (SizeType j = 0; j < nsites; ++j)
 					m(i,j) = Xprev(i,j) * expv[j];
@@ -440,12 +460,15 @@ private:
 	void calcExpV(VectorType& v,SizeType time,SpinEnum spin) const
 	{
 		RealType a = (spin == SPIN_UP) ? aUp_ : aDown_;
+        RealType coef =  (spin == SPIN_UP) ? 1.0 : -1.0;
 		for (SizeType i = 0; i < v.size(); ++i)
-            v[i] = exp(a*spins_(time,i)+params_.mu*params_.beta/params_.ntimes);
+            //v[i] = exp(a*spins_(time,i)+params_.mu*params_.beta/params_.ntimes);
+            v[i] = exp(coef*Lambda*params_.dtau*spins_(time,i) + params_.mu*params_.dtau);
 	}
 
 	bool acceptOrReject(RealType ratio) const
-	{
+    {
+
 		RealType prob = ratio/(1.0 + ratio);
 
 		RealType r = rng_();
@@ -519,6 +542,7 @@ private:
     PsimagLite::Matrix<int> spins_;
 	RealType aUp_,aDown_;
 	MatrixType expH0_;
+    RealType Lambda;
 }; // class Engine
 
 } // namespace Qmc

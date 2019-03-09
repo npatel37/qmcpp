@@ -11,6 +11,7 @@ struct EngineParams {
 		io.readline(thermalizations,"Thermalizations=");
 		io.readline(ntimes,"NumberOfTimes=");
 		io.readline(beta,"Beta=");
+        dtau = beta/ntimes;
 		io.readline(mu,"ChemicalPotential=");
         io.readline(filling,"filling=");
 	}
@@ -18,6 +19,7 @@ struct EngineParams {
 	SizeType thermalizations;
 	SizeType ntimes;
 	RealType beta;
+    RealType dtau;
 	RealType mu;
     RealType filling;
 };
